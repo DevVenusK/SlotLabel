@@ -77,7 +77,7 @@ struct BasicDemoView: View {
 }
 
 #Preview {
-    NavigationStack {
+    NavigationView {
         BasicDemoView()
     }
 }

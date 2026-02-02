@@ -112,7 +112,7 @@ struct CurrencyDemoView: View {
 }
 
 #Preview {
-    NavigationStack {
+    NavigationView {
         CurrencyDemoView()
     }
 }

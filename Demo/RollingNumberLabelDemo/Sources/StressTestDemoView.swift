@@ -127,7 +127,7 @@ struct StressTestDemoView: View {
 }
 
 #Preview {
-    NavigationStack {
+    NavigationView {
         StressTestDemoView()
     }
 }

@@ -135,7 +135,7 @@ struct CustomizationDemoView: View {
 }
 
 #Preview {
-    NavigationStack {
+    NavigationView {
         CustomizationDemoView()
     }
 }
