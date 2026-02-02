@@ -15,6 +15,10 @@ struct ContentView: View {
                     BasicDemoView()
                 }
 
+                NavigationLink("UIKit Demo") {
+                    UIKitDemoView()
+                }
+
                 NavigationLink("Currency Demo") {
                     CurrencyDemoView()
                 }
