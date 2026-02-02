@@ -703,27 +703,9 @@ public final class RollingNumberLabel: UIView {
     }
 
     private func animateExit(container: CharacterContainer, height: CGFloat, isDigit: Bool = true) {
-        // Exit animation is very fast for snappy feel
-        let exitDuration: TimeInterval = 0.1
-
-        UIView.animate(
-            withDuration: exitDuration,
-            delay: 0,
-            options: [.curveEaseIn],
-            animations: {
-                container.alpha = 0
-                if isDigit {
-                    // Digits: slide up and out quickly
-                    container.transform = CGAffineTransform(translationX: 0, y: -height * 0.4)
-                } else {
-                    // Non-digits: quick scale down
-                    container.transform = CGAffineTransform(scaleX: 0.7, y: 0.7)
-                }
-            },
-            completion: { [weak self] _ in
-                self?.recycleContainer(container)
-            }
-        )
+        // Instant removal - no animation
+        container.alpha = 0
+        recycleContainer(container)
     }
 }
 
