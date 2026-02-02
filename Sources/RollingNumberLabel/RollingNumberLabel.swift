@@ -316,35 +316,44 @@ public final class RollingNumberLabel: UIView {
                         height: animationHeight
                     )
                 } else {
-                    // Non-digit change - crossfade
-                    let container = obtainContainer()
-                    container.setCharacter(charAttributedString)
-                    container.frame = targetFrame
-                    container.alpha = 0
-                    addSubview(container)
-                    newContainers.append(container)
+                    // Non-digit change - just slide position (no animation for non-digits)
+                    oldContainer.setCharacter(charAttributedString)
+                    newContainers.append(oldContainer)
 
-                    UIView.animate(withDuration: animationDuration) {
-                        container.alpha = 1
+                    if oldFrame != targetFrame {
+                        UIView.animate(withDuration: animationDuration) {
+                            oldContainer.frame = targetFrame
+                        }
                     }
                 }
             } else {
-                // New character - enter animation
+                // New character
                 let container = obtainContainer()
                 container.setCharacter(charAttributedString)
                 container.frame = targetFrame
                 addSubview(container)
                 newContainers.append(container)
 
-                animateEnter(container: container, height: animationHeight)
+                if newChar.isNumber {
+                    // New digit - enter animation (slide up from below)
+                    animateEnter(container: container, height: animationHeight)
+                }
+                // Non-digit new characters appear instantly (no animation)
             }
         }
 
         // Handle old containers that don't map to new positions
         for (oldIndex, oldContainer) in oldContainers.enumerated() {
             if mapping.oldToNew[oldIndex] == nil {
-                // This old character is being removed - exit animation
-                animateExit(container: oldContainer, height: animationHeight)
+                // This old character is being removed
+                let oldChar = oldChars[oldIndex]
+                if oldChar.isNumber {
+                    // Digit removal - exit animation (slide up and fade out)
+                    animateExit(container: oldContainer, height: animationHeight)
+                } else {
+                    // Non-digit removal - instant removal (no animation)
+                    recycleContainer(oldContainer)
+                }
             } else {
                 // Check if this container was reused
                 let wasReused = newContainers.contains { $0 === oldContainer }
@@ -463,20 +472,29 @@ public final class RollingNumberLabel: UIView {
             mapping.newToOld[newIdx] = oldIdx
         }
 
-        // Handle non-digit characters (like suffix "원")
-        let lastOldDigitIndex = oldInfo.indices.last ?? -1
-        let lastNewDigitIndex = newInfo.indices.last ?? -1
-
-        let oldSuffix = oldInfo.nonDigitRanges.filter { $0.0 > lastOldDigitIndex }
-        let newSuffix = newInfo.nonDigitRanges.filter { $0.0 > lastNewDigitIndex }
-
-        for (i, (newIdx, newChar)) in newSuffix.enumerated() {
-            if i < oldSuffix.count {
-                let (oldIdx, oldChar) = oldSuffix[i]
-                if newChar == oldChar {
-                    mapping.oldToNew[oldIdx] = newIdx
-                    mapping.newToOld[newIdx] = oldIdx
+        // Map non-digit characters (separators like commas, and suffixes like "원")
+        // First, try to match same characters at same positions
+        for (oldIdx, oldChar) in oldInfo.nonDigitRanges {
+            for (newIdx, newChar) in newInfo.nonDigitRanges {
+                if oldIdx == newIdx && oldChar == newChar {
+                    if mapping.oldToNew[oldIdx] == nil && mapping.newToOld[newIdx] == nil {
+                        mapping.oldToNew[oldIdx] = newIdx
+                        mapping.newToOld[newIdx] = oldIdx
+                    }
                 }
+            }
+        }
+
+        // Then, try to match remaining same characters by order
+        var unmatchedOld = oldInfo.nonDigitRanges.filter { mapping.oldToNew[$0.0] == nil }
+        var unmatchedNew = newInfo.nonDigitRanges.filter { mapping.newToOld[$0.0] == nil }
+
+        for (newIdx, newChar) in unmatchedNew {
+            if let matchIndex = unmatchedOld.firstIndex(where: { $0.1 == newChar }) {
+                let (oldIdx, _) = unmatchedOld[matchIndex]
+                mapping.oldToNew[oldIdx] = newIdx
+                mapping.newToOld[newIdx] = oldIdx
+                unmatchedOld.remove(at: matchIndex)
             }
         }
 
