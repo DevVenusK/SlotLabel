@@ -443,18 +443,17 @@ public final class RollingNumberLabel: UIView {
                 let oldContainer = oldContainers[oldIndex]
 
                 if newChar == oldChar {
-                    // Same character - reuse container
+                    // Same character - reuse container and animate position change
                     oldContainer.setCharacter(charAttributedString)
                     newContainers.append(oldContainer)
 
                     if oldFrame != targetFrame {
-                        if newChar.isNumber {
-                            // Digits can slide position
-                            UIView.animate(withDuration: animationDuration) {
-                                oldContainer.frame = targetFrame
-                            }
-                        } else {
-                            // Non-digits: instant position change (no slide)
+                        // Animate all characters' position changes smoothly
+                        UIView.animate(
+                            withDuration: animationDuration,
+                            delay: 0,
+                            options: [.curveEaseInOut]
+                        ) {
                             oldContainer.frame = targetFrame
                         }
                     }
@@ -474,39 +473,39 @@ public final class RollingNumberLabel: UIView {
                         height: animationHeight
                     )
                 } else {
-                    // Non-digit change - instant position (no animation)
+                    // Non-digit change - animate position with fade
                     oldContainer.setCharacter(charAttributedString)
                     newContainers.append(oldContainer)
-                    oldContainer.frame = targetFrame
+
+                    if oldFrame != targetFrame {
+                        UIView.animate(
+                            withDuration: animationDuration,
+                            delay: 0,
+                            options: [.curveEaseInOut]
+                        ) {
+                            oldContainer.frame = targetFrame
+                        }
+                    }
                 }
             } else {
-                // New character
+                // New character - enter animation
                 let container = obtainContainer()
                 container.setCharacter(charAttributedString)
                 container.frame = targetFrame
                 addSubview(container)
                 newContainers.append(container)
 
-                if newChar.isNumber {
-                    // New digit - enter animation (slide up from below)
-                    animateEnter(container: container, height: animationHeight)
-                }
-                // Non-digit new characters appear instantly (no animation)
+                // Apply enter animation to all new characters (numbers and non-numbers)
+                animateEnter(container: container, height: animationHeight, isDigit: newChar.isNumber)
             }
         }
 
         // Handle old containers that don't map to new positions
         for (oldIndex, oldContainer) in oldContainers.enumerated() {
             if mapping.oldToNew[oldIndex] == nil {
-                // This old character is being removed
+                // This old character is being removed - animate exit
                 let oldChar = oldChars[oldIndex]
-                if oldChar.isNumber {
-                    // Digit removal - exit animation (slide up and fade out)
-                    animateExit(container: oldContainer, height: animationHeight)
-                } else {
-                    // Non-digit removal - instant removal (no animation)
-                    recycleContainer(oldContainer)
-                }
+                animateExit(container: oldContainer, height: animationHeight, isDigit: oldChar.isNumber)
             } else {
                 // Check if this container was reused
                 let wasReused = newContainers.contains { $0 === oldContainer }
@@ -679,13 +678,22 @@ public final class RollingNumberLabel: UIView {
 
     // MARK: - Enter/Exit Animations
 
-    private func animateEnter(container: CharacterContainer, height: CGFloat) {
+    private func animateEnter(container: CharacterContainer, height: CGFloat, isDigit: Bool = true) {
         container.alpha = 0
-        container.transform = CGAffineTransform(translationX: 0, y: height * 0.5)
+
+        if isDigit {
+            // Digits: slide up from below with fade
+            container.transform = CGAffineTransform(translationX: 0, y: height * 0.5)
+        } else {
+            // Non-digits: subtle scale and fade
+            container.transform = CGAffineTransform(scaleX: 0.8, y: 0.8)
+        }
 
         UIView.animate(
             withDuration: animationDuration,
             delay: 0,
+            usingSpringWithDamping: 0.8,
+            initialSpringVelocity: 0.5,
             options: [.curveEaseOut],
             animations: {
                 container.alpha = 1
@@ -694,14 +702,20 @@ public final class RollingNumberLabel: UIView {
         )
     }
 
-    private func animateExit(container: CharacterContainer, height: CGFloat) {
+    private func animateExit(container: CharacterContainer, height: CGFloat, isDigit: Bool = true) {
         UIView.animate(
             withDuration: animationDuration,
             delay: 0,
             options: [.curveEaseIn],
             animations: {
                 container.alpha = 0
-                container.transform = CGAffineTransform(translationX: 0, y: -height * 0.5)
+                if isDigit {
+                    // Digits: slide up and out
+                    container.transform = CGAffineTransform(translationX: 0, y: -height * 0.5)
+                } else {
+                    // Non-digits: subtle scale down
+                    container.transform = CGAffineTransform(scaleX: 0.8, y: 0.8)
+                }
             },
             completion: { [weak self] _ in
                 self?.recycleContainer(container)
