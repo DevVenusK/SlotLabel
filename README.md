@@ -139,6 +139,41 @@ label.setAttributedTextWithRolling(attributedText, animated: true, duration: 0.3
 - Suffix (원) slides to new position
 ```
 
+## Demo App
+
+The repository includes a demo app to showcase all features.
+
+### Running the Demo
+
+Using [XcodeGen](https://github.com/yonaskolb/XcodeGen):
+
+```bash
+cd Demo
+xcodegen generate
+open RollingNumberLabelDemo.xcodeproj
+```
+
+Or create a new Xcode project manually and add the package dependency.
+
+### Demo Screens
+
+- **Basic Demo**: Simple number increment/decrement
+- **Currency Demo**: Korean Won formatting with digit count changes
+- **Customization Demo**: Adjust animation duration, alignment, font size, colors
+- **Stress Test**: Rapid update performance testing
+
+## Testing
+
+### Unit Tests (Swift Testing)
+
+```bash
+swift test
+```
+
+### UI Tests
+
+Run UI tests through Xcode after generating the demo project.
+
 ## License
 
 MIT License
