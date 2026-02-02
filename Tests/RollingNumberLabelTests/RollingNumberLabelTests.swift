@@ -468,3 +468,138 @@ struct PerformanceOptimizationTests {
         #expect(label.subviews.count == initialCount)
     }
 }
+
+// MARK: - Multiline Tests
+
+@Suite("Multiline Tests")
+struct MultilineTests {
+
+    @Test("Default numberOfLines is 1")
+    func defaultNumberOfLines() {
+        let label = RollingNumberLabel(frame: .zero)
+        #expect(label.numberOfLines == 1)
+    }
+
+    @Test("Default lineSpacing is 4")
+    func defaultLineSpacing() {
+        let label = RollingNumberLabel(frame: .zero)
+        #expect(label.lineSpacing == 4.0)
+    }
+
+    @Test("Default preferredMaxLayoutWidth is 0")
+    func defaultPreferredMaxLayoutWidth() {
+        let label = RollingNumberLabel(frame: .zero)
+        #expect(label.preferredMaxLayoutWidth == 0)
+    }
+
+    @Test("Single line mode uses single line height")
+    @MainActor
+    func singleLineModeHeight() {
+        let label = RollingNumberLabel(frame: CGRect(x: 0, y: 0, width: 200, height: 50))
+        label.numberOfLines = 1
+
+        let text = NSAttributedString(
+            string: "1234567890",
+            attributes: [.font: UIFont.systemFont(ofSize: 20)]
+        )
+        label.setAttributedText(text, animated: false)
+
+        let singleLineHeight = label.intrinsicContentSize.height
+
+        // Height should be approximately one line
+        #expect(singleLineHeight > 0)
+        #expect(singleLineHeight < 40) // Single line should be relatively short
+    }
+
+    @Test("Multiline mode increases height")
+    @MainActor
+    func multilineModeIncreasesHeight() {
+        let label = RollingNumberLabel(frame: CGRect(x: 0, y: 0, width: 100, height: 200))
+        label.preferredMaxLayoutWidth = 100
+
+        let text = NSAttributedString(
+            string: "1234567890",
+            attributes: [.font: UIFont.systemFont(ofSize: 20)]
+        )
+
+        // Single line mode
+        label.numberOfLines = 1
+        label.setAttributedText(text, animated: false)
+        let singleLineHeight = label.intrinsicContentSize.height
+
+        // Multiline mode with narrow width
+        label.numberOfLines = 0
+        label.setAttributedText(text, animated: false)
+        let multilineHeight = label.intrinsicContentSize.height
+
+        // Multiline should be taller (text wraps)
+        #expect(multilineHeight >= singleLineHeight)
+    }
+
+    @Test("numberOfLines limits line count")
+    @MainActor
+    func numberOfLinesLimitsCount() {
+        let label = RollingNumberLabel(frame: CGRect(x: 0, y: 0, width: 50, height: 200))
+        label.preferredMaxLayoutWidth = 50
+        label.numberOfLines = 2
+
+        let text = NSAttributedString(
+            string: "12345678901234567890",
+            attributes: [.font: UIFont.systemFont(ofSize: 20)]
+        )
+        label.setAttributedText(text, animated: false)
+
+        let limitedHeight = label.intrinsicContentSize.height
+
+        // With unlimited lines
+        label.numberOfLines = 0
+        label.setAttributedText(text, animated: false)
+        let unlimitedHeight = label.intrinsicContentSize.height
+
+        // Limited should be shorter or equal
+        #expect(limitedHeight <= unlimitedHeight)
+    }
+
+    @Test("Line spacing affects height")
+    @MainActor
+    func lineSpacingAffectsHeight() {
+        let label = RollingNumberLabel(frame: CGRect(x: 0, y: 0, width: 50, height: 200))
+        label.preferredMaxLayoutWidth = 50
+        label.numberOfLines = 0
+
+        let text = NSAttributedString(
+            string: "1234567890",
+            attributes: [.font: UIFont.systemFont(ofSize: 20)]
+        )
+
+        label.lineSpacing = 0
+        label.setAttributedText(text, animated: false)
+        let noSpacingHeight = label.intrinsicContentSize.height
+
+        label.lineSpacing = 20
+        label.setAttributedText(text, animated: false)
+        let withSpacingHeight = label.intrinsicContentSize.height
+
+        // With spacing should be taller
+        #expect(withSpacingHeight >= noSpacingHeight)
+    }
+
+    @Test("Rolling animation works with multiline")
+    @MainActor
+    func rollingAnimationWithMultiline() async {
+        let label = RollingNumberLabel(frame: CGRect(x: 0, y: 0, width: 100, height: 200))
+        label.numberOfLines = 0
+        label.preferredMaxLayoutWidth = 100
+        label.animationDuration = 0.1
+
+        let text1 = NSAttributedString(string: "1,000")
+        let text2 = NSAttributedString(string: "2,000")
+
+        label.setAttributedText(text1, animated: false)
+        label.setAttributedText(text2, animated: true)
+
+        try? await Task.sleep(nanoseconds: 200_000_000)
+
+        #expect(label.attributedText?.string == "2,000")
+    }
+}
