@@ -12,8 +12,8 @@ import UIKit
 public extension UILabel {
 
     private enum AssociatedKeys {
-        static let rollingOverlay = "rollingOverlay"
-        static let previousAttributedText = "previousAttributedText"
+        nonisolated(unsafe) static var rollingOverlay: Void?
+        nonisolated(unsafe) static var previousAttributedText: Void?
     }
 
     /// The rolling number overlay view (created on demand)
