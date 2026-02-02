@@ -11,9 +11,9 @@ import UIKit
 /// by overlaying a RollingNumberLabel on top.
 public extension UILabel {
 
-    private struct AssociatedKeys {
-        static var rollingOverlay = "rollingOverlay"
-        static var previousAttributedText = "previousAttributedText"
+    private enum AssociatedKeys {
+        static let rollingOverlay = "rollingOverlay"
+        static let previousAttributedText = "previousAttributedText"
     }
 
     /// The rolling number overlay view (created on demand)
