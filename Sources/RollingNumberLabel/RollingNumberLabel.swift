@@ -10,7 +10,7 @@ import UIKit
 /// A label that animates number changes with a rolling (slot machine) effect.
 /// Only changed digits roll upward while unchanged characters remain static.
 /// Supports digit count changes with smooth enter/exit animations.
-public class RollingNumberLabel: UIView {
+public final class RollingNumberLabel: UIView {
 
     // MARK: - Public Properties
 
