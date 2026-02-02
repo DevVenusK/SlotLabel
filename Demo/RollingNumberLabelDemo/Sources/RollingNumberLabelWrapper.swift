@@ -13,7 +13,7 @@ struct RollingNumberLabelView: UIViewRepresentable {
     let attributedText: NSAttributedString
     var animated: Bool = true
     var animationDuration: TimeInterval = 0.3
-    var enterAnimationDuration: TimeInterval = 0.15
+    var enterAnimationDuration: TimeInterval = 0.3
     var textAlignment: NSTextAlignment = .left
     var numberOfLines: Int = 1
     var lineSpacing: CGFloat = 4.0
@@ -52,7 +52,7 @@ extension RollingNumberLabelView {
         color: UIColor = .label,
         animated: Bool = true,
         animationDuration: TimeInterval = 0.3,
-        enterAnimationDuration: TimeInterval = 0.15,
+        enterAnimationDuration: TimeInterval = 0.3,
         textAlignment: NSTextAlignment = .left,
         numberOfLines: Int = 1,
         lineSpacing: CGFloat = 4.0,

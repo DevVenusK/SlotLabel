@@ -18,8 +18,8 @@ public final class RollingNumberLabel: UIView {
     public var animationDuration: TimeInterval = 0.3
 
     /// The duration of enter animation (when digit count increases)
-    /// Set to a smaller value for snappier appearance of new digits
-    public var enterAnimationDuration: TimeInterval = 0.15
+    /// Defaults to same as animationDuration for synchronized size changes
+    public var enterAnimationDuration: TimeInterval = 0.3
 
     /// The timing function for the animation
     public var animationTimingFunction: CAMediaTimingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
