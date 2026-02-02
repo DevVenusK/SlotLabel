@@ -703,8 +703,8 @@ public final class RollingNumberLabel: UIView {
     }
 
     private func animateExit(container: CharacterContainer, height: CGFloat, isDigit: Bool = true) {
-        // Exit animation is faster for snappier feel
-        let exitDuration = animationDuration * 0.5
+        // Exit animation is very fast for snappy feel
+        let exitDuration: TimeInterval = 0.1
 
         UIView.animate(
             withDuration: exitDuration,
