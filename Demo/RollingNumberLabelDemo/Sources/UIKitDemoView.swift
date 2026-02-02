@@ -226,10 +226,10 @@ final class UIKitDemoViewController: UIViewController {
     }
 
     private func setupControlsSection() {
-        let randomAllButton = createButton(title: "Random All", style: .borderedProminent)
+        let randomAllButton = createButton(title: "Random All", style: .borderedProminent())
         randomAllButton.addTarget(self, action: #selector(randomAllTapped), for: .touchUpInside)
 
-        let resetButton = createButton(title: "Reset All", style: .bordered)
+        let resetButton = createButton(title: "Reset All", style: .bordered())
         resetButton.addTarget(self, action: #selector(resetAllTapped), for: .touchUpInside)
 
         let stack = UIStackView(arrangedSubviews: [randomAllButton, resetButton])
@@ -255,7 +255,7 @@ final class UIKitDemoViewController: UIViewController {
     private func createBalanceButtonsStack() -> UIStackView {
         let amounts = [-100_000, -10_000, 10_000, 100_000]
         let buttons = amounts.map { amount -> UIButton in
-            let button = createButton(title: formatAmount(amount), style: .bordered)
+            let button = createButton(title: formatAmount(amount), style: .bordered())
             button.tag = amount
             button.addTarget(self, action: #selector(balanceButtonTapped(_:)), for: .touchUpInside)
             return button
@@ -269,13 +269,13 @@ final class UIKitDemoViewController: UIViewController {
     }
 
     private func createSimpleButtonsStack() -> UIStackView {
-        let minusButton = createButton(title: "-100", style: .bordered)
+        let minusButton = createButton(title: "-100", style: .bordered())
         minusButton.addTarget(self, action: #selector(simpleMinusTapped), for: .touchUpInside)
 
-        let plusButton = createButton(title: "+100", style: .bordered)
+        let plusButton = createButton(title: "+100", style: .bordered())
         plusButton.addTarget(self, action: #selector(simplePlusTapped), for: .touchUpInside)
 
-        let randomButton = createButton(title: "Random", style: .borderedProminent)
+        let randomButton = createButton(title: "Random", style: .borderedProminent())
         randomButton.addTarget(self, action: #selector(simpleRandomTapped), for: .touchUpInside)
 
         let stack = UIStackView(arrangedSubviews: [minusButton, plusButton, randomButton])
@@ -286,13 +286,13 @@ final class UIKitDemoViewController: UIViewController {
     }
 
     private func createExtensionButtonsStack() -> UIStackView {
-        let minusButton = createButton(title: "-1000", style: .bordered)
+        let minusButton = createButton(title: "-1000", style: .bordered())
         minusButton.addTarget(self, action: #selector(extensionMinusTapped), for: .touchUpInside)
 
-        let plusButton = createButton(title: "+1000", style: .bordered)
+        let plusButton = createButton(title: "+1000", style: .bordered())
         plusButton.addTarget(self, action: #selector(extensionPlusTapped), for: .touchUpInside)
 
-        let randomButton = createButton(title: "Random", style: .borderedProminent)
+        let randomButton = createButton(title: "Random", style: .borderedProminent())
         randomButton.addTarget(self, action: #selector(extensionRandomTapped), for: .touchUpInside)
 
         let stack = UIStackView(arrangedSubviews: [minusButton, plusButton, randomButton])
