@@ -33,10 +33,18 @@ public final class RollingNumberLabel: UIView {
     // MARK: - Private Properties
 
     private var characterContainers: [CharacterContainer] = []
+    private var containerPool: [CharacterContainer] = []
     private var currentText: String = ""
     private var isAnimating: Bool = false
     private var pendingAttributedText: NSAttributedString?
     private var cachedContentSize: CGSize = .zero
+    private var characterSizeCache: [CharacterCacheKey: CGSize] = [:]
+
+    private struct CharacterCacheKey: Hashable {
+        let character: String
+        let fontName: String
+        let fontSize: CGFloat
+    }
 
     // MARK: - Initialization
 
@@ -53,6 +61,7 @@ public final class RollingNumberLabel: UIView {
     private func setupView() {
         clipsToBounds = true
         isUserInteractionEnabled = false
+        layer.drawsAsynchronously = true
     }
 
     // MARK: - Public Methods
@@ -121,29 +130,71 @@ public final class RollingNumberLabel: UIView {
             return
         }
 
-        // Calculate size by measuring each character individually
-        // This ensures consistency with actual layout
         var totalWidth: CGFloat = 0
         var maxHeight: CGFloat = 0
 
         let string = attributedText.string
-        for (index, _) in string.enumerated() {
-            let range = NSRange(location: index, length: 1)
-            let charAttributedString = attributedText.attributedSubstring(from: range)
-            let charSize = charAttributedString.size()
-
-            totalWidth += ceil(charSize.width)
-            maxHeight = max(maxHeight, ceil(charSize.height))
+        for (index, char) in string.enumerated() {
+            let charSize = getCharacterSize(at: index, in: attributedText, character: char)
+            totalWidth += charSize.width
+            maxHeight = max(maxHeight, charSize.height)
         }
 
         cachedContentSize = CGSize(width: totalWidth, height: maxHeight)
         invalidateIntrinsicContentSize()
     }
 
+    private func getCharacterSize(at index: Int, in attributedText: NSAttributedString, character: Character) -> CGSize {
+        let range = NSRange(location: index, length: 1)
+        let attributes = attributedText.attributes(at: index, effectiveRange: nil)
+
+        // Create cache key
+        let font = attributes[.font] as? UIFont ?? UIFont.systemFont(ofSize: 17)
+        let cacheKey = CharacterCacheKey(
+            character: String(character),
+            fontName: font.fontName,
+            fontSize: font.pointSize
+        )
+
+        // Check cache
+        if let cachedSize = characterSizeCache[cacheKey] {
+            return cachedSize
+        }
+
+        // Calculate and cache
+        let charAttributedString = attributedText.attributedSubstring(from: range)
+        var size = charAttributedString.size()
+        size.width = ceil(size.width)
+        size.height = ceil(size.height)
+
+        characterSizeCache[cacheKey] = size
+        return size
+    }
+
+    // MARK: - Private Methods - Container Pool
+
+    private func obtainContainer() -> CharacterContainer {
+        if let container = containerPool.popLast() {
+            container.prepareForReuse()
+            return container
+        }
+        return CharacterContainer()
+    }
+
+    private func recycleContainer(_ container: CharacterContainer) {
+        container.removeFromSuperview()
+        containerPool.append(container)
+    }
+
+    private func recycleContainers(_ containers: [CharacterContainer]) {
+        containers.forEach { recycleContainer($0) }
+    }
+
     // MARK: - Private Methods - Character Management
 
     private func rebuildCharacters(with attributedText: NSAttributedString) {
-        characterContainers.forEach { $0.removeFromSuperview() }
+        // Recycle existing containers
+        recycleContainers(characterContainers)
         characterContainers.removeAll()
 
         let string = attributedText.string
@@ -152,7 +203,7 @@ public final class RollingNumberLabel: UIView {
             let range = NSRange(location: index, length: 1)
             let charAttributedString = attributedText.attributedSubstring(from: range)
 
-            let container = CharacterContainer()
+            let container = obtainContainer()
             container.setCharacter(charAttributedString)
             addSubview(container)
             characterContainers.append(container)
@@ -190,10 +241,10 @@ public final class RollingNumberLabel: UIView {
             container.frame = CGRect(
                 x: xOffset,
                 y: startY,
-                width: ceil(size.width),
-                height: ceil(contentHeight)
+                width: size.width,
+                height: contentHeight
             )
-            xOffset += ceil(size.width)
+            xOffset += size.width
         }
     }
 
@@ -215,49 +266,48 @@ public final class RollingNumberLabel: UIView {
         // Create mapping between old and new positions based on digit alignment (right-to-left)
         let mapping = createDigitMapping(oldInfo: oldDigitInfo, newInfo: newDigitInfo)
 
-        // Store old containers for exit animation
+        // Store old containers and their frames
         let oldContainers = characterContainers
         let oldContainerFrames = oldContainers.map { $0.frame }
 
-        // Create new containers
-        characterContainers.removeAll()
-        for (index, _) in newText.enumerated() {
-            let range = NSRange(location: index, length: 1)
-            let charAttributedString = newAttributedText.attributedSubstring(from: range)
+        // Prepare new containers array
+        var newContainers: [CharacterContainer] = []
+        newContainers.reserveCapacity(newChars.count)
 
-            let container = CharacterContainer()
-            container.setCharacter(charAttributedString)
-            addSubview(container)
-            characterContainers.append(container)
-        }
-
-        // Calculate new layout positions
-        let newPositions = calculateCharacterPositions()
+        // Calculate positions for new layout
+        let newPositions = calculatePositions(for: newAttributedText)
         let animationHeight = cachedContentSize.height
 
-        // Apply animations based on mapping
-        for (newIndex, container) in characterContainers.enumerated() {
+        // Build new containers, reusing where possible
+        for (newIndex, _) in newChars.enumerated() {
+            let range = NSRange(location: newIndex, length: 1)
+            let charAttributedString = newAttributedText.attributedSubstring(from: range)
             let targetFrame = newPositions[newIndex]
             let newChar = newChars[newIndex]
 
             if let oldIndex = mapping.newToOld[newIndex] {
-                // This position has a corresponding old position
                 let oldChar = oldChars[oldIndex]
                 let oldFrame = oldContainerFrames[oldIndex]
+                let oldContainer = oldContainers[oldIndex]
 
                 if newChar == oldChar {
-                    // Same character - just animate position change if needed
-                    container.frame = oldFrame
-                    container.alpha = 1
+                    // Same character - reuse container, animate position if needed
+                    oldContainer.setCharacter(charAttributedString)
+                    newContainers.append(oldContainer)
 
                     if oldFrame != targetFrame {
                         UIView.animate(withDuration: animationDuration) {
-                            container.frame = targetFrame
+                            oldContainer.frame = targetFrame
                         }
                     }
                 } else if newChar.isNumber && oldChar.isNumber {
-                    // Different digit - rolling animation
+                    // Different digit - get new container and animate rolling
+                    let container = obtainContainer()
+                    container.setCharacter(charAttributedString)
                     container.frame = targetFrame
+                    addSubview(container)
+                    newContainers.append(container)
+
                     container.animateRollingUp(
                         from: String(oldChar),
                         to: String(newChar),
@@ -267,29 +317,44 @@ public final class RollingNumberLabel: UIView {
                     )
                 } else {
                     // Non-digit change - crossfade
+                    let container = obtainContainer()
+                    container.setCharacter(charAttributedString)
                     container.frame = targetFrame
                     container.alpha = 0
+                    addSubview(container)
+                    newContainers.append(container)
+
                     UIView.animate(withDuration: animationDuration) {
                         container.alpha = 1
                     }
                 }
             } else {
                 // New character - enter animation
+                let container = obtainContainer()
+                container.setCharacter(charAttributedString)
                 container.frame = targetFrame
+                addSubview(container)
+                newContainers.append(container)
+
                 animateEnter(container: container, height: animationHeight)
             }
         }
 
-        // Animate exit for old containers that don't map to new positions
+        // Handle old containers that don't map to new positions
         for (oldIndex, oldContainer) in oldContainers.enumerated() {
             if mapping.oldToNew[oldIndex] == nil {
                 // This old character is being removed - exit animation
                 animateExit(container: oldContainer, height: animationHeight)
             } else {
-                // This container is replaced by new one, just remove it
-                oldContainer.removeFromSuperview()
+                // Check if this container was reused
+                let wasReused = newContainers.contains { $0 === oldContainer }
+                if !wasReused {
+                    recycleContainer(oldContainer)
+                }
             }
         }
+
+        characterContainers = newContainers
 
         // Complete animation
         DispatchQueue.main.asyncAfter(deadline: .now() + animationDuration + 0.05) { [weak self] in
@@ -297,7 +362,7 @@ public final class RollingNumberLabel: UIView {
         }
     }
 
-    private func calculateCharacterPositions() -> [CGRect] {
+    private func calculatePositions(for attributedText: NSAttributedString) -> [CGRect] {
         let contentWidth = cachedContentSize.width
         let contentHeight = cachedContentSize.height
 
@@ -317,18 +382,20 @@ public final class RollingNumberLabel: UIView {
         let startY = (effectiveHeight - contentHeight) / 2
 
         var positions: [CGRect] = []
+        positions.reserveCapacity(attributedText.length)
         var xOffset = startX
 
-        for container in characterContainers {
-            let size = container.characterSize
+        let string = attributedText.string
+        for (index, char) in string.enumerated() {
+            let size = getCharacterSize(at: index, in: attributedText, character: char)
             let frame = CGRect(
                 x: xOffset,
                 y: startY,
-                width: ceil(size.width),
-                height: ceil(contentHeight)
+                width: size.width,
+                height: contentHeight
             )
             positions.append(frame)
-            xOffset += ceil(size.width)
+            xOffset += size.width
         }
 
         return positions
@@ -357,6 +424,9 @@ public final class RollingNumberLabel: UIView {
         var digits: [Character] = []
         var nonDigits: [(Int, Character)] = []
 
+        indices.reserveCapacity(chars.count)
+        digits.reserveCapacity(chars.count)
+
         for (index, char) in chars.enumerated() {
             if char.isNumber {
                 indices.append(index)
@@ -378,22 +448,27 @@ public final class RollingNumberLabel: UIView {
         var mapping = PositionMapping()
 
         // Align digits from right to left (for currency formatting)
-        let oldDigitIndices = Array(oldInfo.indices.reversed())
-        let newDigitIndices = Array(newInfo.indices.reversed())
+        let oldDigitIndices = oldInfo.indices.reversed()
+        let newDigitIndices = newInfo.indices.reversed()
 
-        let minCount = min(oldDigitIndices.count, newDigitIndices.count)
+        let oldArray = Array(oldDigitIndices)
+        let newArray = Array(newDigitIndices)
+        let minCount = min(oldArray.count, newArray.count)
 
         // Map digits from right to left
         for i in 0..<minCount {
-            let oldIdx = oldDigitIndices[i]
-            let newIdx = newDigitIndices[i]
+            let oldIdx = oldArray[i]
+            let newIdx = newArray[i]
             mapping.oldToNew[oldIdx] = newIdx
             mapping.newToOld[newIdx] = oldIdx
         }
 
         // Handle non-digit characters (like suffix "원")
-        let oldSuffix = oldInfo.nonDigitRanges.filter { $0.0 > (oldInfo.indices.last ?? -1) }
-        let newSuffix = newInfo.nonDigitRanges.filter { $0.0 > (newInfo.indices.last ?? -1) }
+        let lastOldDigitIndex = oldInfo.indices.last ?? -1
+        let lastNewDigitIndex = newInfo.indices.last ?? -1
+
+        let oldSuffix = oldInfo.nonDigitRanges.filter { $0.0 > lastOldDigitIndex }
+        let newSuffix = newInfo.nonDigitRanges.filter { $0.0 > lastNewDigitIndex }
 
         for (i, (newIdx, newChar)) in newSuffix.enumerated() {
             if i < oldSuffix.count {
@@ -434,8 +509,8 @@ public final class RollingNumberLabel: UIView {
                 container.alpha = 0
                 container.transform = CGAffineTransform(translationX: 0, y: -height * 0.5)
             },
-            completion: { _ in
-                container.removeFromSuperview()
+            completion: { [weak self] _ in
+                self?.recycleContainer(container)
             }
         )
     }
@@ -443,7 +518,7 @@ public final class RollingNumberLabel: UIView {
 
 // MARK: - CharacterContainer
 
-private class CharacterContainer: UIView {
+private final class CharacterContainer: UIView {
 
     private let currentLabel = UILabel()
     private let animatingLabel = UILabel()
@@ -466,6 +541,7 @@ private class CharacterContainer: UIView {
     private func setupViews() {
         clipsToBounds = true
         isUserInteractionEnabled = false
+        layer.drawsAsynchronously = true
 
         currentLabel.textAlignment = .center
         animatingLabel.textAlignment = .center
@@ -484,11 +560,25 @@ private class CharacterContainer: UIView {
         }
     }
 
+    func prepareForReuse() {
+        alpha = 1
+        transform = .identity
+        currentLabel.attributedText = nil
+        animatingLabel.attributedText = nil
+        animatingLabel.isHidden = true
+        layer.shouldRasterize = false
+    }
+
     func setCharacter(_ attributedString: NSAttributedString) {
         currentLabel.attributedText = attributedString
         cachedSize = attributedString.size()
         cachedSize.width = ceil(cachedSize.width)
         cachedSize.height = ceil(cachedSize.height)
+    }
+
+    func enableRasterization() {
+        layer.shouldRasterize = true
+        layer.rasterizationScale = UIScreen.main.scale
     }
 
     func animateRollingUp(
