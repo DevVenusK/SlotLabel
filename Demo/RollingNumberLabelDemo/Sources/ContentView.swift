@@ -19,6 +19,10 @@ struct ContentView: View {
                     CurrencyDemoView()
                 }
 
+                NavigationLink("Multiline Demo") {
+                    MultilineDemoView()
+                }
+
                 NavigationLink("Customization Demo") {
                     CustomizationDemoView()
                 }
