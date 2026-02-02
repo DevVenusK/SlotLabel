@@ -13,6 +13,7 @@ struct RollingNumberLabelView: UIViewRepresentable {
     let attributedText: NSAttributedString
     var animated: Bool = true
     var animationDuration: TimeInterval = 0.3
+    var enterAnimationDuration: TimeInterval = 0.15
     var textAlignment: NSTextAlignment = .left
     var numberOfLines: Int = 1
     var lineSpacing: CGFloat = 4.0
@@ -21,6 +22,7 @@ struct RollingNumberLabelView: UIViewRepresentable {
     func makeUIView(context: Context) -> RollingNumberLabel {
         let label = RollingNumberLabel()
         label.animationDuration = animationDuration
+        label.enterAnimationDuration = enterAnimationDuration
         label.textAlignment = textAlignment
         label.numberOfLines = numberOfLines
         label.lineSpacing = lineSpacing
@@ -32,6 +34,7 @@ struct RollingNumberLabelView: UIViewRepresentable {
 
     func updateUIView(_ uiView: RollingNumberLabel, context: Context) {
         uiView.animationDuration = animationDuration
+        uiView.enterAnimationDuration = enterAnimationDuration
         uiView.textAlignment = textAlignment
         uiView.numberOfLines = numberOfLines
         uiView.lineSpacing = lineSpacing
@@ -49,6 +52,7 @@ extension RollingNumberLabelView {
         color: UIColor = .label,
         animated: Bool = true,
         animationDuration: TimeInterval = 0.3,
+        enterAnimationDuration: TimeInterval = 0.15,
         textAlignment: NSTextAlignment = .left,
         numberOfLines: Int = 1,
         lineSpacing: CGFloat = 4.0,
@@ -63,6 +67,7 @@ extension RollingNumberLabelView {
         )
         self.animated = animated
         self.animationDuration = animationDuration
+        self.enterAnimationDuration = enterAnimationDuration
         self.textAlignment = textAlignment
         self.numberOfLines = numberOfLines
         self.lineSpacing = lineSpacing

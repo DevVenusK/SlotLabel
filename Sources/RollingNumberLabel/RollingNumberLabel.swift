@@ -14,8 +14,12 @@ public final class RollingNumberLabel: UIView {
 
     // MARK: - Public Properties
 
-    /// The duration of the rolling animation
+    /// The duration of the rolling animation (digit value change)
     public var animationDuration: TimeInterval = 0.3
+
+    /// The duration of enter animation (when digit count increases)
+    /// Set to a smaller value for snappier appearance of new digits
+    public var enterAnimationDuration: TimeInterval = 0.15
 
     /// The timing function for the animation
     public var animationTimingFunction: CAMediaTimingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -690,10 +694,10 @@ public final class RollingNumberLabel: UIView {
         }
 
         UIView.animate(
-            withDuration: animationDuration,
+            withDuration: enterAnimationDuration,
             delay: 0,
-            usingSpringWithDamping: 0.8,
-            initialSpringVelocity: 0.5,
+            usingSpringWithDamping: 0.85,
+            initialSpringVelocity: 0.8,
             options: [.curveEaseOut],
             animations: {
                 container.alpha = 1
