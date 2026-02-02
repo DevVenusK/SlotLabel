@@ -14,7 +14,7 @@ A UIView that animates number changes with a rolling (slot machine) effect. Only
 
 ## Requirements
 
-- iOS 13.0+
+- iOS 15.0+
 - Swift 5.0+
 
 ## Installation

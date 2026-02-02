@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "RollingNumberLabel",
     platforms: [
-        .iOS(.v13)
+        .iOS(.v15)
     ],
     products: [
         .library(
