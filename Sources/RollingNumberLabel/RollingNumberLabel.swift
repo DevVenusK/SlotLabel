@@ -291,12 +291,18 @@ public final class RollingNumberLabel: UIView {
                 let oldContainer = oldContainers[oldIndex]
 
                 if newChar == oldChar {
-                    // Same character - reuse container, animate position if needed
+                    // Same character - reuse container
                     oldContainer.setCharacter(charAttributedString)
                     newContainers.append(oldContainer)
 
                     if oldFrame != targetFrame {
-                        UIView.animate(withDuration: animationDuration) {
+                        if newChar.isNumber {
+                            // Digits can slide position
+                            UIView.animate(withDuration: animationDuration) {
+                                oldContainer.frame = targetFrame
+                            }
+                        } else {
+                            // Non-digits: instant position change (no slide)
                             oldContainer.frame = targetFrame
                         }
                     }
@@ -316,15 +322,10 @@ public final class RollingNumberLabel: UIView {
                         height: animationHeight
                     )
                 } else {
-                    // Non-digit change - just slide position (no animation for non-digits)
+                    // Non-digit change - instant position (no animation)
                     oldContainer.setCharacter(charAttributedString)
                     newContainers.append(oldContainer)
-
-                    if oldFrame != targetFrame {
-                        UIView.animate(withDuration: animationDuration) {
-                            oldContainer.frame = targetFrame
-                        }
-                    }
+                    oldContainer.frame = targetFrame
                 }
             } else {
                 // New character
@@ -456,6 +457,10 @@ public final class RollingNumberLabel: UIView {
     private func createDigitMapping(oldInfo: DigitInfo, newInfo: DigitInfo) -> PositionMapping {
         var mapping = PositionMapping()
 
+        let oldDigitCount = oldInfo.indices.count
+        let newDigitCount = newInfo.indices.count
+        let digitCountChanged = oldDigitCount != newDigitCount
+
         // Align digits from right to left (for currency formatting)
         let oldDigitIndices = oldInfo.indices.reversed()
         let newDigitIndices = newInfo.indices.reversed()
@@ -472,29 +477,39 @@ public final class RollingNumberLabel: UIView {
             mapping.newToOld[newIdx] = oldIdx
         }
 
-        // Map non-digit characters (separators like commas, and suffixes like "원")
-        // First, try to match same characters at same positions
-        for (oldIdx, oldChar) in oldInfo.nonDigitRanges {
-            for (newIdx, newChar) in newInfo.nonDigitRanges {
-                if oldIdx == newIdx && oldChar == newChar {
-                    if mapping.oldToNew[oldIdx] == nil && mapping.newToOld[newIdx] == nil {
-                        mapping.oldToNew[oldIdx] = newIdx
-                        mapping.newToOld[newIdx] = oldIdx
-                    }
+        // Only map suffix characters (after the last digit) like "원"
+        // Don't map separators within the number (like commas) - they appear/disappear instantly
+        let lastOldDigitIndex = oldInfo.indices.last ?? -1
+        let lastNewDigitIndex = newInfo.indices.last ?? -1
+
+        let oldSuffix = oldInfo.nonDigitRanges.filter { $0.0 > lastOldDigitIndex }
+        let newSuffix = newInfo.nonDigitRanges.filter { $0.0 > lastNewDigitIndex }
+
+        // Map suffix characters by order if same character
+        for (i, (newIdx, newChar)) in newSuffix.enumerated() {
+            if i < oldSuffix.count {
+                let (oldIdx, oldChar) = oldSuffix[i]
+                if newChar == oldChar {
+                    mapping.oldToNew[oldIdx] = newIdx
+                    mapping.newToOld[newIdx] = oldIdx
                 }
             }
         }
 
-        // Then, try to match remaining same characters by order
-        var unmatchedOld = oldInfo.nonDigitRanges.filter { mapping.oldToNew[$0.0] == nil }
-        var unmatchedNew = newInfo.nonDigitRanges.filter { mapping.newToOld[$0.0] == nil }
-
-        for (newIdx, newChar) in unmatchedNew {
-            if let matchIndex = unmatchedOld.firstIndex(where: { $0.1 == newChar }) {
-                let (oldIdx, _) = unmatchedOld[matchIndex]
-                mapping.oldToNew[oldIdx] = newIdx
-                mapping.newToOld[newIdx] = oldIdx
-                unmatchedOld.remove(at: matchIndex)
+        // For same digit count, also map separators at same positions
+        if !digitCountChanged {
+            for (oldIdx, oldChar) in oldInfo.nonDigitRanges {
+                if oldIdx <= lastOldDigitIndex {
+                    // This is a separator within the number
+                    for (newIdx, newChar) in newInfo.nonDigitRanges {
+                        if newIdx <= lastNewDigitIndex && oldIdx == newIdx && oldChar == newChar {
+                            if mapping.oldToNew[oldIdx] == nil && mapping.newToOld[newIdx] == nil {
+                                mapping.oldToNew[oldIdx] = newIdx
+                                mapping.newToOld[newIdx] = oldIdx
+                            }
+                        }
+                    }
+                }
             }
         }
 
