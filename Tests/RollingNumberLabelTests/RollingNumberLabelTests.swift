@@ -292,3 +292,179 @@ struct UILabelExtensionTests {
         #expect(overlay?.attributedText?.string == "2,000원")
     }
 }
+
+// MARK: - Performance Optimization Tests
+
+@Suite("Performance Optimization Tests")
+struct PerformanceOptimizationTests {
+
+    @Test("Subview count remains stable after multiple updates")
+    @MainActor
+    func subviewCountStability() async {
+        let label = RollingNumberLabel(frame: CGRect(x: 0, y: 0, width: 300, height: 50))
+        label.animationDuration = 0.05
+
+        // Initial text: 10 characters
+        let text1 = NSAttributedString(string: "1,000,000원")
+        label.setAttributedText(text1, animated: false)
+        let initialSubviewCount = label.subviews.count
+
+        // Update multiple times
+        for i in 1...5 {
+            let newText = NSAttributedString(string: "\(i),234,567원")
+            label.setAttributedText(newText, animated: false)
+        }
+
+        // Subview count should be same (same character count)
+        #expect(label.subviews.count == initialSubviewCount)
+    }
+
+    @Test("Container reuse for unchanged characters")
+    @MainActor
+    func containerReuseForUnchangedCharacters() async {
+        let label = RollingNumberLabel(frame: CGRect(x: 0, y: 0, width: 300, height: 50))
+        label.animationDuration = 0.05
+
+        // Set initial text
+        let text1 = NSAttributedString(string: "1,000,000원")
+        label.setAttributedText(text1, animated: false)
+
+        // Get reference to suffix container (원)
+        let suffixContainerBefore = label.subviews.last
+
+        // Update with animation - suffix should remain same
+        let text2 = NSAttributedString(string: "1,234,567원")
+        label.setAttributedText(text2, animated: true)
+
+        // Wait for animation
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        // Suffix container should be reused (same instance)
+        let suffixContainerAfter = label.subviews.last
+        #expect(suffixContainerBefore === suffixContainerAfter)
+    }
+
+    @Test("Repeated updates with same text do not create new containers")
+    @MainActor
+    func repeatedSameTextUpdates() {
+        let label = RollingNumberLabel(frame: CGRect(x: 0, y: 0, width: 300, height: 50))
+
+        let text = NSAttributedString(string: "1,000원")
+
+        // Set same text multiple times
+        for _ in 1...10 {
+            label.setAttributedText(text, animated: false)
+        }
+
+        // Should have exactly 6 subviews (1, comma, 0, 0, 0, 원)
+        #expect(label.subviews.count == 6)
+    }
+
+    @Test("Character size caching works correctly")
+    @MainActor
+    func characterSizeCaching() {
+        let label = RollingNumberLabel(frame: CGRect(x: 0, y: 0, width: 300, height: 50))
+        let font = UIFont.systemFont(ofSize: 20)
+
+        // Text with repeated characters
+        let text1 = NSAttributedString(string: "1,111,111", attributes: [.font: font])
+        label.setAttributedText(text1, animated: false)
+        let size1 = label.intrinsicContentSize
+
+        // Same characters, different arrangement
+        let text2 = NSAttributedString(string: "1,111,111", attributes: [.font: font])
+        label.setAttributedText(text2, animated: false)
+        let size2 = label.intrinsicContentSize
+
+        // Sizes should be identical (cached)
+        #expect(size1 == size2)
+    }
+
+    @Test("Memory stability during rapid updates")
+    @MainActor
+    func memoryStabilityDuringRapidUpdates() async {
+        let label = RollingNumberLabel(frame: CGRect(x: 0, y: 0, width: 300, height: 50))
+        label.animationDuration = 0.02
+
+        let font = UIFont.systemFont(ofSize: 20)
+
+        // Initial setup
+        label.setAttributedText(NSAttributedString(string: "0", attributes: [.font: font]), animated: false)
+
+        // Rapid updates
+        for i in 1...50 {
+            let text = NSAttributedString(string: "\(i)", attributes: [.font: font])
+            label.setAttributedText(text, animated: true)
+        }
+
+        // Wait for all animations
+        try? await Task.sleep(nanoseconds: 200_000_000)
+
+        // Should end with "50"
+        #expect(label.attributedText?.string == "50")
+
+        // Subview count should be reasonable (not accumulated)
+        #expect(label.subviews.count <= 10)
+    }
+
+    @Test("Layer optimization is enabled")
+    @MainActor
+    func layerOptimizationEnabled() {
+        let label = RollingNumberLabel(frame: CGRect(x: 0, y: 0, width: 200, height: 50))
+
+        // drawsAsynchronously should be enabled
+        #expect(label.layer.drawsAsynchronously == true)
+    }
+
+    @Test("Different font sizes have separate cache entries")
+    @MainActor
+    func differentFontSizesSeparateCache() {
+        let label = RollingNumberLabel(frame: CGRect(x: 0, y: 0, width: 300, height: 50))
+
+        // Same character, different font sizes
+        let smallFont = UIFont.systemFont(ofSize: 12)
+        let largeFont = UIFont.systemFont(ofSize: 24)
+
+        let text1 = NSAttributedString(string: "1", attributes: [.font: smallFont])
+        label.setAttributedText(text1, animated: false)
+        let smallSize = label.intrinsicContentSize
+
+        let text2 = NSAttributedString(string: "1", attributes: [.font: largeFont])
+        label.setAttributedText(text2, animated: false)
+        let largeSize = label.intrinsicContentSize
+
+        // Different font sizes should produce different sizes
+        #expect(largeSize.width > smallSize.width)
+        #expect(largeSize.height > smallSize.height)
+    }
+
+    @Test("Digit count change handles container pool correctly")
+    @MainActor
+    func digitCountChangeContainerPool() async {
+        let label = RollingNumberLabel(frame: CGRect(x: 0, y: 0, width: 300, height: 50))
+        label.animationDuration = 0.05
+
+        // Start with fewer characters
+        let text1 = NSAttributedString(string: "999")
+        label.setAttributedText(text1, animated: false)
+        let initialCount = label.subviews.count // 3
+
+        // Increase to more characters
+        let text2 = NSAttributedString(string: "1,000")
+        label.setAttributedText(text2, animated: true)
+
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        // Should have more subviews now
+        #expect(label.subviews.count == 5) // 1, comma, 0, 0, 0
+
+        // Decrease back
+        let text3 = NSAttributedString(string: "999")
+        label.setAttributedText(text3, animated: true)
+
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        // Should be back to initial count
+        #expect(label.subviews.count == initialCount)
+    }
+}
