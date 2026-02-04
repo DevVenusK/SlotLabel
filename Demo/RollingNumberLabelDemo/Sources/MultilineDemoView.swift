@@ -12,10 +12,19 @@ struct MultilineDemoView: View {
     @State private var stats = DashboardStats()
     @State private var isAutoUpdating = false
     @State private var timer: Timer?
+    @State private var multilineValue: Int = 123_456_789
+    @State private var numberOfLines: Int = 0
+    @State private var lineSpacing: CGFloat = 4.0
 
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
+                // Multiline Feature Demo
+                multilineFeatureSection
+
+                Divider()
+                    .padding(.horizontal)
+
                 // Dashboard Cards
                 dashboardSection
 
@@ -37,6 +46,96 @@ struct MultilineDemoView: View {
         .onDisappear {
             stopAutoUpdate()
         }
+    }
+
+    // MARK: - Multiline Feature Section
+
+    private var multilineFeatureSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Multiline Feature")
+                .font(.headline)
+                .padding(.horizontal)
+
+            VStack(spacing: 12) {
+                // Multiline label in narrow container
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("numberOfLines: \(numberOfLines == 0 ? "unlimited" : "\(numberOfLines)")")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    GeometryReader { geometry in
+                        RollingNumberLabelView(
+                            attributedText: multilineAttributedText,
+                            animationDuration: 0.35,
+                            textAlignment: .left,
+                            numberOfLines: numberOfLines,
+                            lineSpacing: lineSpacing,
+                            preferredMaxLayoutWidth: geometry.size.width
+                        )
+                    }
+                    .frame(height: numberOfLines == 1 ? 40 : 100)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(Color(.systemGray6))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                // Controls for multiline
+                VStack(spacing: 12) {
+                    HStack {
+                        Text("Lines:")
+                        Picker("Lines", selection: $numberOfLines) {
+                            Text("1").tag(1)
+                            Text("2").tag(2)
+                            Text("3").tag(3)
+                            Text("∞").tag(0)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+
+                    HStack {
+                        Text("Spacing: \(Int(lineSpacing))")
+                        Slider(value: $lineSpacing, in: 0...20, step: 2)
+                    }
+
+                    HStack(spacing: 12) {
+                        Button("-1M") {
+                            multilineValue = max(0, multilineValue - 1_000_000)
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button("+1M") {
+                            multilineValue += 1_000_000
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button("Random") {
+                            multilineValue = Int.random(in: 1_000_000...9_999_999_999)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+                .padding(.horizontal)
+            }
+            .padding(.horizontal)
+        }
+    }
+
+    private var multilineAttributedText: NSAttributedString {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+
+        let numberString = formatter.string(from: NSNumber(value: multilineValue)) ?? "\(multilineValue)"
+        let fullString = "₩\(numberString)"
+
+        let attributed = NSMutableAttributedString(string: fullString)
+
+        attributed.addAttributes([
+            .font: UIFont.monospacedDigitSystemFont(ofSize: 28, weight: .bold),
+            .foregroundColor: UIColor.systemIndigo
+        ], range: NSRange(location: 0, length: fullString.count))
+
+        return attributed
     }
 
     // MARK: - Dashboard Section

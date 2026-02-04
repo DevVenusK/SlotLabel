@@ -14,8 +14,12 @@ public final class RollingNumberLabel: UIView {
 
     // MARK: - Public Properties
 
-    /// The duration of the rolling animation
+    /// The duration of the rolling animation (digit value change)
     public var animationDuration: TimeInterval = 0.3
+
+    /// The duration of enter animation (when digit count increases)
+    /// Defaults to same as animationDuration for synchronized size changes
+    public var enterAnimationDuration: TimeInterval = 0.3
 
     /// The timing function for the animation
     public var animationTimingFunction: CAMediaTimingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -23,6 +27,31 @@ public final class RollingNumberLabel: UIView {
     /// Text alignment within the view bounds
     public var textAlignment: NSTextAlignment = .left {
         didSet {
+            setNeedsLayout()
+        }
+    }
+
+    /// Maximum number of lines (0 = unlimited, 1 = single line default)
+    public var numberOfLines: Int = 1 {
+        didSet {
+            updateCachedContentSize()
+            setNeedsLayout()
+        }
+    }
+
+    /// Spacing between lines
+    public var lineSpacing: CGFloat = 4.0 {
+        didSet {
+            updateCachedContentSize()
+            setNeedsLayout()
+        }
+    }
+
+    /// Preferred maximum layout width for multiline support.
+    /// Set this to enable automatic line breaking.
+    public var preferredMaxLayoutWidth: CGFloat = 0 {
+        didSet {
+            updateCachedContentSize()
             setNeedsLayout()
         }
     }
@@ -39,11 +68,21 @@ public final class RollingNumberLabel: UIView {
     private var pendingAttributedText: NSAttributedString?
     private var cachedContentSize: CGSize = .zero
     private var characterSizeCache: [CharacterCacheKey: CGSize] = [:]
+    private var cachedLineInfos: [LineInfo] = []
 
     private struct CharacterCacheKey: Hashable {
         let character: String
         let fontName: String
         let fontSize: CGFloat
+    }
+
+    /// Stores line layout information for multiline support
+    private struct LineInfo {
+        let startIndex: Int
+        let endIndex: Int
+        let width: CGFloat
+        let height: CGFloat
+        let yOffset: CGFloat
     }
 
     // MARK: - Initialization
@@ -126,22 +165,128 @@ public final class RollingNumberLabel: UIView {
     private func updateCachedContentSize() {
         guard let attributedText = attributedText, attributedText.length > 0 else {
             cachedContentSize = .zero
+            cachedLineInfos = []
             invalidateIntrinsicContentSize()
             return
         }
 
-        var totalWidth: CGFloat = 0
-        var maxHeight: CGFloat = 0
-
-        let string = attributedText.string
-        for (index, char) in string.enumerated() {
-            let charSize = getCharacterSize(at: index, in: attributedText, character: char)
-            totalWidth += charSize.width
-            maxHeight = max(maxHeight, charSize.height)
+        // Determine available max width
+        let maxWidth: CGFloat
+        if preferredMaxLayoutWidth > 0 {
+            maxWidth = preferredMaxLayoutWidth
+        } else if bounds.width > 0 {
+            maxWidth = bounds.width
+        } else {
+            maxWidth = .greatestFiniteMagnitude
         }
 
-        cachedContentSize = CGSize(width: totalWidth, height: maxHeight)
+        // Single line mode - use optimized path
+        if numberOfLines == 1 {
+            var totalWidth: CGFloat = 0
+            var maxHeight: CGFloat = 0
+
+            let string = attributedText.string
+            for (index, char) in string.enumerated() {
+                let charSize = getCharacterSize(at: index, in: attributedText, character: char)
+                totalWidth += charSize.width
+                maxHeight = max(maxHeight, charSize.height)
+            }
+
+            cachedContentSize = CGSize(width: totalWidth, height: maxHeight)
+            cachedLineInfos = [LineInfo(
+                startIndex: 0,
+                endIndex: attributedText.length - 1,
+                width: totalWidth,
+                height: maxHeight,
+                yOffset: 0
+            )]
+        } else {
+            // Multiline calculation
+            cachedLineInfos = calculateLineBreaks(for: attributedText, maxWidth: maxWidth)
+
+            let totalWidth = cachedLineInfos.map { $0.width }.max() ?? 0
+            var totalHeight: CGFloat = 0
+            if let lastLine = cachedLineInfos.last {
+                totalHeight = lastLine.yOffset + lastLine.height
+            }
+
+            cachedContentSize = CGSize(width: totalWidth, height: totalHeight)
+        }
+
         invalidateIntrinsicContentSize()
+    }
+
+    private func calculateLineBreaks(for attributedText: NSAttributedString, maxWidth: CGFloat) -> [LineInfo] {
+        let string = attributedText.string
+        let chars = Array(string)
+
+        guard !chars.isEmpty else { return [] }
+
+        var lines: [LineInfo] = []
+        var currentLineStartIndex = 0
+        var currentLineWidth: CGFloat = 0
+        var currentLineHeight: CGFloat = 0
+        var yOffset: CGFloat = 0
+
+        for (index, char) in chars.enumerated() {
+            let charSize = getCharacterSize(at: index, in: attributedText, character: char)
+
+            // Check if we need to wrap
+            let wouldExceedWidth = currentLineWidth + charSize.width > maxWidth && currentLineWidth > 0
+
+            if wouldExceedWidth {
+                // Check max lines limit
+                if numberOfLines > 0 && lines.count >= numberOfLines - 1 {
+                    // Last allowed line - include all remaining characters
+                    var remainingWidth = currentLineWidth
+                    var remainingHeight = currentLineHeight
+                    for i in index..<chars.count {
+                        let size = getCharacterSize(at: i, in: attributedText, character: chars[i])
+                        remainingWidth += size.width
+                        remainingHeight = max(remainingHeight, size.height)
+                    }
+                    lines.append(LineInfo(
+                        startIndex: currentLineStartIndex,
+                        endIndex: chars.count - 1,
+                        width: remainingWidth,
+                        height: remainingHeight,
+                        yOffset: yOffset
+                    ))
+                    return lines
+                }
+
+                // Finalize current line
+                lines.append(LineInfo(
+                    startIndex: currentLineStartIndex,
+                    endIndex: index - 1,
+                    width: currentLineWidth,
+                    height: currentLineHeight,
+                    yOffset: yOffset
+                ))
+
+                // Start new line
+                yOffset += currentLineHeight + lineSpacing
+                currentLineStartIndex = index
+                currentLineWidth = charSize.width
+                currentLineHeight = charSize.height
+            } else {
+                currentLineWidth += charSize.width
+                currentLineHeight = max(currentLineHeight, charSize.height)
+            }
+        }
+
+        // Add final line
+        if currentLineStartIndex < chars.count {
+            lines.append(LineInfo(
+                startIndex: currentLineStartIndex,
+                endIndex: chars.count - 1,
+                width: currentLineWidth,
+                height: currentLineHeight,
+                yOffset: yOffset
+            ))
+        }
+
+        return lines
     }
 
     private func getCharacterSize(at index: Int, in attributedText: NSAttributedString, character: Character) -> CGSize {
@@ -214,37 +359,48 @@ public final class RollingNumberLabel: UIView {
     }
 
     private func layoutCharacters() {
-        guard !characterContainers.isEmpty else { return }
+        guard !characterContainers.isEmpty, !cachedLineInfos.isEmpty else { return }
 
-        let contentWidth = cachedContentSize.width
         let contentHeight = cachedContentSize.height
-
-        // Calculate starting X based on alignment
-        let startX: CGFloat
-        switch textAlignment {
-        case .center:
-            startX = (bounds.width - contentWidth) / 2
-        case .right:
-            startX = bounds.width - contentWidth
-        default:
-            startX = 0
-        }
 
         // Calculate Y to center vertically
         let effectiveHeight = bounds.height > 0 ? bounds.height : contentHeight
-        let startY = (effectiveHeight - contentHeight) / 2
+        let baseY = (effectiveHeight - contentHeight) / 2
 
-        var xOffset = startX
+        var containerIndex = 0
 
-        for container in characterContainers {
-            let size = container.characterSize
-            container.frame = CGRect(
-                x: xOffset,
-                y: startY,
-                width: size.width,
-                height: contentHeight
-            )
-            xOffset += size.width
+        for lineInfo in cachedLineInfos {
+            // Calculate starting X based on alignment for this line
+            let startX: CGFloat
+            switch textAlignment {
+            case .center:
+                startX = (bounds.width - lineInfo.width) / 2
+            case .right:
+                startX = bounds.width - lineInfo.width
+            default:
+                startX = 0
+            }
+
+            var xOffset = startX
+            let lineY = baseY + lineInfo.yOffset
+
+            // Layout characters for this line
+            for charIndex in lineInfo.startIndex...lineInfo.endIndex {
+                guard containerIndex < characterContainers.count else { break }
+
+                let container = characterContainers[containerIndex]
+                let size = container.characterSize
+
+                container.frame = CGRect(
+                    x: xOffset,
+                    y: lineY,
+                    width: size.width,
+                    height: lineInfo.height
+                )
+
+                xOffset += size.width
+                containerIndex += 1
+            }
         }
     }
 
@@ -291,18 +447,17 @@ public final class RollingNumberLabel: UIView {
                 let oldContainer = oldContainers[oldIndex]
 
                 if newChar == oldChar {
-                    // Same character - reuse container
+                    // Same character - reuse container and animate position change
                     oldContainer.setCharacter(charAttributedString)
                     newContainers.append(oldContainer)
 
                     if oldFrame != targetFrame {
-                        if newChar.isNumber {
-                            // Digits can slide position
-                            UIView.animate(withDuration: animationDuration) {
-                                oldContainer.frame = targetFrame
-                            }
-                        } else {
-                            // Non-digits: instant position change (no slide)
+                        // Animate all characters' position changes smoothly
+                        UIView.animate(
+                            withDuration: animationDuration,
+                            delay: 0,
+                            options: [.curveEaseInOut]
+                        ) {
                             oldContainer.frame = targetFrame
                         }
                     }
@@ -322,39 +477,39 @@ public final class RollingNumberLabel: UIView {
                         height: animationHeight
                     )
                 } else {
-                    // Non-digit change - instant position (no animation)
+                    // Non-digit change - animate position with fade
                     oldContainer.setCharacter(charAttributedString)
                     newContainers.append(oldContainer)
-                    oldContainer.frame = targetFrame
+
+                    if oldFrame != targetFrame {
+                        UIView.animate(
+                            withDuration: animationDuration,
+                            delay: 0,
+                            options: [.curveEaseInOut]
+                        ) {
+                            oldContainer.frame = targetFrame
+                        }
+                    }
                 }
             } else {
-                // New character
+                // New character - enter animation
                 let container = obtainContainer()
                 container.setCharacter(charAttributedString)
                 container.frame = targetFrame
                 addSubview(container)
                 newContainers.append(container)
 
-                if newChar.isNumber {
-                    // New digit - enter animation (slide up from below)
-                    animateEnter(container: container, height: animationHeight)
-                }
-                // Non-digit new characters appear instantly (no animation)
+                // Apply enter animation to all new characters (numbers and non-numbers)
+                animateEnter(container: container, height: animationHeight, isDigit: newChar.isNumber)
             }
         }
 
         // Handle old containers that don't map to new positions
         for (oldIndex, oldContainer) in oldContainers.enumerated() {
             if mapping.oldToNew[oldIndex] == nil {
-                // This old character is being removed
+                // This old character is being removed - animate exit
                 let oldChar = oldChars[oldIndex]
-                if oldChar.isNumber {
-                    // Digit removal - exit animation (slide up and fade out)
-                    animateExit(container: oldContainer, height: animationHeight)
-                } else {
-                    // Non-digit removal - instant removal (no animation)
-                    recycleContainer(oldContainer)
-                }
+                animateExit(container: oldContainer, height: animationHeight, isDigit: oldChar.isNumber)
             } else {
                 // Check if this container was reused
                 let wasReused = newContainers.contains { $0 === oldContainer }
@@ -373,39 +528,48 @@ public final class RollingNumberLabel: UIView {
     }
 
     private func calculatePositions(for attributedText: NSAttributedString) -> [CGRect] {
-        let contentWidth = cachedContentSize.width
-        let contentHeight = cachedContentSize.height
+        guard !cachedLineInfos.isEmpty else { return [] }
 
-        // Calculate starting X based on alignment
-        let startX: CGFloat
-        switch textAlignment {
-        case .center:
-            startX = (bounds.width - contentWidth) / 2
-        case .right:
-            startX = bounds.width - contentWidth
-        default:
-            startX = 0
-        }
+        let contentHeight = cachedContentSize.height
 
         // Calculate Y to center vertically
         let effectiveHeight = bounds.height > 0 ? bounds.height : contentHeight
-        let startY = (effectiveHeight - contentHeight) / 2
+        let baseY = (effectiveHeight - contentHeight) / 2
 
         var positions: [CGRect] = []
         positions.reserveCapacity(attributedText.length)
-        var xOffset = startX
 
         let string = attributedText.string
-        for (index, char) in string.enumerated() {
-            let size = getCharacterSize(at: index, in: attributedText, character: char)
-            let frame = CGRect(
-                x: xOffset,
-                y: startY,
-                width: size.width,
-                height: contentHeight
-            )
-            positions.append(frame)
-            xOffset += size.width
+
+        for lineInfo in cachedLineInfos {
+            // Calculate starting X based on alignment for this line
+            let startX: CGFloat
+            switch textAlignment {
+            case .center:
+                startX = (bounds.width - lineInfo.width) / 2
+            case .right:
+                startX = bounds.width - lineInfo.width
+            default:
+                startX = 0
+            }
+
+            var xOffset = startX
+            let lineY = baseY + lineInfo.yOffset
+
+            for index in lineInfo.startIndex...lineInfo.endIndex {
+                let charIndex = string.index(string.startIndex, offsetBy: index)
+                let char = string[charIndex]
+                let size = getCharacterSize(at: index, in: attributedText, character: char)
+
+                let frame = CGRect(
+                    x: xOffset,
+                    y: lineY,
+                    width: size.width,
+                    height: lineInfo.height
+                )
+                positions.append(frame)
+                xOffset += size.width
+            }
         }
 
         return positions
@@ -518,13 +682,22 @@ public final class RollingNumberLabel: UIView {
 
     // MARK: - Enter/Exit Animations
 
-    private func animateEnter(container: CharacterContainer, height: CGFloat) {
+    private func animateEnter(container: CharacterContainer, height: CGFloat, isDigit: Bool = true) {
         container.alpha = 0
-        container.transform = CGAffineTransform(translationX: 0, y: height * 0.5)
+
+        if isDigit {
+            // Digits: slide up from below with fade
+            container.transform = CGAffineTransform(translationX: 0, y: height * 0.5)
+        } else {
+            // Non-digits: subtle scale and fade
+            container.transform = CGAffineTransform(scaleX: 0.8, y: 0.8)
+        }
 
         UIView.animate(
-            withDuration: animationDuration,
+            withDuration: enterAnimationDuration,
             delay: 0,
+            usingSpringWithDamping: 0.85,
+            initialSpringVelocity: 0.8,
             options: [.curveEaseOut],
             animations: {
                 container.alpha = 1
@@ -533,19 +706,10 @@ public final class RollingNumberLabel: UIView {
         )
     }
 
-    private func animateExit(container: CharacterContainer, height: CGFloat) {
-        UIView.animate(
-            withDuration: animationDuration,
-            delay: 0,
-            options: [.curveEaseIn],
-            animations: {
-                container.alpha = 0
-                container.transform = CGAffineTransform(translationX: 0, y: -height * 0.5)
-            },
-            completion: { [weak self] _ in
-                self?.recycleContainer(container)
-            }
-        )
+    private func animateExit(container: CharacterContainer, height: CGFloat, isDigit: Bool = true) {
+        // Instant removal - no animation
+        container.alpha = 0
+        recycleContainer(container)
     }
 }
 
